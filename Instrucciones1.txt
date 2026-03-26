@@ -1,0 +1,16 @@
+1.Primer paso, en la consola o terminal de donde abran el archivo instalen las librerías siguientes:
+
+npx expo install react-native-maps expo-location expo-camera expo-blur expo-av expo-gl
+
+2.Después instalen las librerías para el 3D de neco arc:
+
+npm install three @react-three/fiber @react-three/drei
+
+
+Intalen en su teléfono el expo
+
+Para ejecutar en terminal usen: npx expo start --clear
+
+
+EL ARCHIVO ESTA EN LA CARPETA
+app -> (tabs) -> index

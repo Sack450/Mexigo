@@ -1,0 +1,1840 @@
+import { MaterialIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Location from "expo-location";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import MapView, { Marker, Polyline } from "react-native-maps";
+import NecoAvatar from "./NecoAvatar";
+
+const necoIcono = require("../../assets/necogif.gif");
+
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#101f22" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#101f22" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#0dccf2" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#1b3338" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#212a37" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#081012" }],
+  },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  {
+    featureType: "road",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+];
+const lightMapStyle = [
+  {
+    featureType: "road",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }],
+  },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+];
+
+function obtenerDistanciaMetros(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const rad = Math.PI / 180;
+  const a =
+    Math.sin(((lat2 - lat1) * rad) / 2) ** 2 +
+    Math.cos(lat1 * rad) *
+      Math.cos(lat2 * rad) *
+      Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
+// 🌐 DICCIONARIO COMPLETO Y REPARADO (8 Idiomas Globales + Tienda)
+const DICCIONARIO = {
+  de: {
+    nombrePropio: "Deutsch",
+    mapa: "KARTE",
+    coleccion: "SAMMLUNG",
+    perfil: "PROFIL",
+    tienda: "SHOP",
+    ajustes: "EINSTELLUNGEN",
+    nivel: "LEVEL",
+    pts: "pkt",
+    escanea: "SCANNEN",
+    irAlla: "DORTHIN",
+    tu: "DU",
+    zona: "Du bist in der Zone!",
+    metros: "In {d} Metern",
+    cargando: "Karte lädt...",
+    titPerfil: "Spielerprofil",
+    titCol: "Deine Sammlung",
+    titTienda: "Weltmeisterschafts-Shop",
+    titAjustes: "Systemeinstellungen",
+    vacio: "Du hast noch keine Elemente entdeckt.",
+    exp: "Exp. für Level 26",
+    insignias: "ERHALTENE ABZEICHEN",
+    tema: "ANZEIGE & LEISTUNG",
+    modoOscuro: "Cyberpunk-Modus",
+    ahorro: "Energiesparmodus (3D aus)",
+    audio: "AUDIO",
+    musica: "Hintergrundmusik",
+    sfx: "Soundeffekte",
+    dev: "ENTWICKLER-OPTIONEN",
+    hackDistancia: "Entfernung ignorieren",
+    cancelar: "Abbrechen",
+    selIdioma: "Sprache auswählen",
+    comprar: "KAUFEN",
+  },
+  en: {
+    nombrePropio: "English",
+    mapa: "MAP",
+    coleccion: "COLLECTION",
+    perfil: "PROFILE",
+    tienda: "STORE",
+    ajustes: "SETTINGS",
+    nivel: "LEVEL",
+    pts: "pts",
+    escanea: "SCAN",
+    irAlla: "GO THERE",
+    tu: "YOU",
+    zona: "You are in the zone!",
+    metros: "{d} meters away",
+    cargando: "Loading Map...",
+    titPerfil: "Player Profile",
+    titCol: "Your Collection",
+    titTienda: "World Cup Store",
+    titAjustes: "System Settings",
+    vacio: "You haven't discovered any items yet.",
+    exp: "Exp. to Level 26",
+    insignias: "EARNED BADGES",
+    tema: "DISPLAY & PERFORMANCE",
+    modoOscuro: "Force Night Mode",
+    ahorro: "Battery Saver (Disable 3D)",
+    audio: "AUDIO",
+    musica: "Background Music",
+    sfx: "Sound Effects",
+    dev: "DEVELOPER OPTIONS",
+    hackDistancia: "Ignore Distance",
+    cancelar: "Cancel",
+    selIdioma: "Select Language",
+    comprar: "BUY",
+  },
+  es: {
+    nombrePropio: "Español",
+    mapa: "MAPA",
+    coleccion: "COLECCIÓN",
+    perfil: "PERFIL",
+    tienda: "TIENDA",
+    ajustes: "AJUSTES",
+    nivel: "NIVEL",
+    pts: "pts",
+    escanea: "ESCANEAR",
+    irAlla: "IR ALLÁ",
+    tu: "TÚ",
+    zona: "¡Estás en la zona!",
+    metros: "A {d} metros",
+    cargando: "Cargando Mapa...",
+    titPerfil: "Perfil de Jugador",
+    titCol: "Tu Colección",
+    titTienda: "Tienda Mundialista",
+    titAjustes: "Ajustes del Sistema",
+    vacio: "Aún no has descubierto elementos.",
+    exp: "Exp. para Nivel 26",
+    insignias: "INSIGNIAS OBTENIDAS",
+    tema: "PANTALLA Y RENDIMIENTO",
+    modoOscuro: "Forzar Modo Nocturno",
+    ahorro: "Ahorro de Batería (Apaga 3D)",
+    audio: "AUDIO",
+    musica: "Música de Fondo",
+    sfx: "Efectos de Sonido",
+    dev: "OPCIONES DE DESARROLLO",
+    hackDistancia: "Ignorar Distancia",
+    cancelar: "Cancelar",
+    selIdioma: "Seleccionar Idioma",
+    comprar: "COMPRAR",
+  },
+  fr: {
+    nombrePropio: "Français",
+    mapa: "CARTE",
+    coleccion: "COLLECTION",
+    perfil: "PROFIL",
+    tienda: "BOUTIQUE",
+    ajustes: "PARAMÈTRES",
+    nivel: "NIVEAU",
+    pts: "pts",
+    escanea: "SCANNER",
+    irAlla: "ALLER LÀ",
+    tu: "TOI",
+    zona: "Tu es dans la zone!",
+    metros: "À {d} mètres",
+    cargando: "Chargement...",
+    titPerfil: "Profil du joueur",
+    titCol: "Ta Collection",
+    titTienda: "Boutique de la Coupe du Monde",
+    titAjustes: "Paramètres",
+    vacio: "Tu n'as encore rien découvert.",
+    exp: "Exp. pour Niv. 26",
+    insignias: "BADGES OBTENUS",
+    tema: "AFFICHAGE ET PERFORMANCES",
+    modoOscuro: "Mode Cyberpunk",
+    ahorro: "Économie d'énergie (Sans 3D)",
+    audio: "AUDIO",
+    musica: "Musique de fond",
+    sfx: "Effets sonores",
+    dev: "OPTIONS DÉV",
+    hackDistancia: "Ignorer la distance",
+    cancelar: "Annuler",
+    selIdioma: "Choisir la langue",
+    comprar: "ACHETER",
+  },
+  it: {
+    nombrePropio: "Italiano",
+    mapa: "MAPPA",
+    coleccion: "COLLEZIONE",
+    perfil: "PROFILO",
+    tienda: "NEGOZIO",
+    ajustes: "IMPOSTAZIONI",
+    nivel: "LIVELLO",
+    pts: "pti",
+    escanea: "SCANNERIZZA",
+    irAlla: "VAI LÌ",
+    tu: "TU",
+    zona: "Sei nella zona!",
+    metros: "A {d} metri",
+    cargando: "Caricamento...",
+    titPerfil: "Profilo Giocatore",
+    titCol: "Tua Collezione",
+    titTienda: "Negozio Mondiale",
+    titAjustes: "Impostazioni",
+    vacio: "Non hai ancora scoperto nulla.",
+    exp: "Esp. per Liv 26",
+    insignias: "BADGE OTTENUTI",
+    tema: "SCHERMO E PRESTAZIONI",
+    modoOscuro: "Modalità Cyberpunk",
+    ahorro: "Risparmio Energetico (No 3D)",
+    audio: "AUDIO",
+    musica: "Musica di Sottofondo",
+    sfx: "Effetti Sonori",
+    dev: "OPZIONI SVILUPPATORE",
+    hackDistancia: "Ignora Distanza",
+    cancelar: "Annulla",
+    selIdioma: "Seleziona Lingua",
+    comprar: "COMPRA",
+  },
+  ja: {
+    nombrePropio: "日本語 (Japonés)",
+    mapa: "マップ",
+    coleccion: "コレクション",
+    perfil: "プロフィール",
+    tienda: "ストア",
+    ajustes: "設定",
+    nivel: "レベル",
+    pts: "pt",
+    escanea: "スキャン",
+    irAlla: "そこへ行く",
+    tu: "あなた",
+    zona: "ゾーンに入りました！",
+    metros: "{d} メートル先",
+    cargando: "読み込み中...",
+    titPerfil: "プレイヤープロフィール",
+    titCol: "あなたのコレクション",
+    titTienda: "ワールドカップストア",
+    titAjustes: "システム設定",
+    vacio: "まだアイテムを見つけていません。",
+    exp: "Lv.26までの経験値",
+    insignias: "獲得したバッジ",
+    tema: "ディスプレイとパフォーマンス",
+    modoOscuro: "サイバーパンク",
+    ahorro: "バッテリーセーバー (3Dオフ)",
+    audio: "オーディオ",
+    musica: "BGM",
+    sfx: "効果音",
+    dev: "開発者オプション",
+    hackDistancia: "距離を無視する",
+    cancelar: "キャンセル",
+    selIdioma: "言語を選択",
+    comprar: "購入",
+  },
+  pt: {
+    nombrePropio: "Português",
+    mapa: "MAPA",
+    coleccion: "COLEÇÃO",
+    perfil: "PERFIL",
+    tienda: "LOJA",
+    ajustes: "CONFIGURAÇÕES",
+    nivel: "NÍVEL",
+    pts: "pts",
+    escanea: "ESCANEAR",
+    irAlla: "IR LÁ",
+    tu: "VOCÊ",
+    zona: "Você está na zona!",
+    metros: "A {d} metros",
+    cargando: "Carregando Mapa...",
+    titPerfil: "Perfil do Jogador",
+    titCol: "Sua Coleção",
+    titTienda: "Loja da Copa",
+    titAjustes: "Configurações do Sistema",
+    vacio: "Você ainda não descobriu itens.",
+    exp: "Exp. para Nível 26",
+    insignias: "EMBLEMAS OBTIDOS",
+    tema: "TELA E DESEMPENHO",
+    modoOscuro: "Modo Cyberpunk",
+    ahorro: "Economia de Bateria (Sem 3D)",
+    audio: "ÁUDIO",
+    musica: "Música de Fundo",
+    sfx: "Efeitos Sonoros",
+    dev: "OPÇÕES DE DEV",
+    hackDistancia: "Ignorar Distância",
+    cancelar: "Cancelar",
+    selIdioma: "Selecione o Idioma",
+    comprar: "COMPRAR",
+  },
+  zh: {
+    nombrePropio: "中文 (Chino)",
+    mapa: "地图",
+    coleccion: "收藏",
+    perfil: "个人资料",
+    tienda: "商店",
+    ajustes: "设置",
+    nivel: "等级",
+    pts: "分",
+    escanea: "扫描",
+    irAlla: "去那里",
+    tu: "你",
+    zona: "你在区域内！",
+    metros: "距离 {d} 米",
+    cargando: "加载地图中...",
+    titPerfil: "玩家资料",
+    titCol: "你的收藏",
+    titTienda: "世界杯商店",
+    titAjustes: "系统设置",
+    vacio: "你还没有发现任何物品。",
+    exp: "到26级的经验",
+    insignias: "获得的徽章",
+    tema: "显示与性能",
+    modoOscuro: "赛博朋克模式",
+    ahorro: "省电模式 (关闭3D)",
+    audio: "音频",
+    musica: "背景音乐",
+    sfx: "音效",
+    dev: "开发者选项",
+    hackDistancia: "忽略距离",
+    cancelar: "取消",
+    selIdioma: "选择语言",
+    comprar: "购买",
+  },
+};
+const listaIdiomas = Object.keys(DICCIONARIO).map((key) => ({
+  id: key,
+  nombre: DICCIONARIO[key].nombrePropio,
+}));
+
+// BASE DE DATOS DE COLECCIONABLES CON LORE
+const TROFEOS = [
+  {
+    id: 1,
+    nombre: "Taco de Oro",
+    icono: "local-dining",
+    color: "#facc15",
+    desbloqueado: true,
+    desc: "Otorgado por visitar 5 taquerías locales en tu primera semana. ¡Eres un catador oficial de la ciudad!",
+  },
+  {
+    id: 2,
+    nombre: "Concha Mítica",
+    icono: "bakery-dining",
+    color: "#ff2d55",
+    desbloqueado: true,
+    desc: "Encontrada escaneando el código oculto en la mítica Panadería Don Pepe. Suelta destellos azucarados.",
+  },
+  {
+    id: 3,
+    nombre: "Café Veloz",
+    icono: "local-cafe",
+    color: "#0dccf2",
+    desbloqueado: true,
+    desc: "Apoyaste a una cafetería independiente a las 7:00 AM. La energía fluye por tus venas.",
+  },
+  {
+    id: 4,
+    nombre: "El Gran Kiosko",
+    icono: "storefront",
+    color: "#94a3b8",
+    desbloqueado: false,
+    desc: "BLOQUEADO: Se desbloquea al caminar al Kiosko Central de la plaza y completar su misión diaria.",
+  },
+  {
+    id: 5,
+    nombre: "Inversor Local",
+    icono: "account-balance",
+    color: "#94a3b8",
+    desbloqueado: false,
+    desc: "BLOQUEADO: Demuestra tu apoyo a la economía local acumulando más de 10,000 pts en MiPyMEs.",
+  },
+  {
+    id: 6,
+    nombre: "Caminante",
+    icono: "directions-walk",
+    color: "#94a3b8",
+    desbloqueado: false,
+    desc: "BLOQUEADO: Recorre un total de 50km usando la aplicación. ¡Usa bloqueador solar!",
+  },
+];
+
+// ARTÍCULOS DE LA TIENDA (Mundial 2026 + Boosters)
+const ARTICULOS_TIENDA = [
+  {
+    id: 1,
+    nombre: "Multiplicador XP x2",
+    tipo: "Booster",
+    precio: 500,
+    icono: "bolt",
+    color: "#0dccf2",
+    desc: "Gana el doble de experiencia por 1 hora.",
+  },
+  {
+    id: 2,
+    nombre: "Balón Oficial 2026",
+    tipo: "Cosmético",
+    precio: 1200,
+    icono: "sports-soccer",
+    color: "#fff",
+    desc: "Edición especial del mundial de Norteamérica.",
+  },
+  {
+    id: 3,
+    nombre: "Jersey de la Selección",
+    tipo: "Cosmético",
+    precio: 2500,
+    icono: "checkroom",
+    color: "#0bda54",
+    desc: "Viste a tu avatar con los colores de la selección local.",
+  },
+  {
+    id: 4,
+    nombre: "Boleto Dorado VIP",
+    tipo: "Sorteo",
+    precio: 5000,
+    icono: "local-activity",
+    color: "#facc15",
+    desc: "Participa en la rifa mensual por boletos para el Mundial.",
+  },
+];
+
+export default function App() {
+  const [idioma, setIdioma] = useState("es");
+  const t = DICCIONARIO[idioma] || DICCIONARIO["es"];
+  const [tabActual, setTabActual] = useState("mapa");
+
+  const [modalIdiomasVisible, setModalIdiomasVisible] = useState(false);
+  const [trofeoSeleccionado, setTrofeoSeleccionado] = useState(null); // Para la ventana flotante de colección
+
+  const [esDeNoche, setEsDeNoche] = useState(false);
+  const [forzarNoche, setForzarNoche] = useState(false);
+  const [ahorroBateria, setAhorroBateria] = useState(false);
+  const [musicaFondo, setMusicaFondo] = useState(true);
+  const [efectosSonido, setEfectosSonido] = useState(true);
+  const [modoDevHack, setModoDevHack] = useState(false);
+
+  const [location, setLocation] = useState(null);
+  const [negocios, setNegocios] = useState([]);
+  const [negocioSeleccionado, setNegocioSeleccionado] = useState(null);
+  const [rutaActiva, setRutaActiva] = useState(false);
+
+  const [puntos, setPuntos] = useState(2400);
+  const [energia, setEnergia] = useState(150);
+  const [nivel, setNivel] = useState(25);
+  const [experiencia, setExperiencia] = useState(65);
+
+  const [permisoCamara, pedirPermisoCamara] = useCameraPermissions();
+  const [mostrarCamara, setMostrarCamara] = useState(false);
+
+  useEffect(() => {
+    const verificarHora = () => {
+      const hora = new Date().getHours();
+      setEsDeNoche(hora >= 19 || hora < 6);
+    };
+    verificarHora();
+    const intervaloReloj = setInterval(verificarHora, 60000);
+
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      let initialLocation = await Location.getCurrentPositionAsync({});
+      const lat = initialLocation.coords.latitude;
+      const lng = initialLocation.coords.longitude;
+
+      setNegocios([
+        {
+          id: 1,
+          nombre: "Kiosko Central",
+          desc: "Misión local",
+          lat: lat + 0.0001,
+          lng: lng + 0.0002,
+          recompensa: 20,
+        },
+        {
+          id: 2,
+          nombre: "Panadería Don Pepe",
+          desc: "Misión de oro",
+          lat: lat - 0.0015,
+          lng: lng - 0.001,
+          recompensa: 50,
+        },
+      ]);
+
+      const precisionGPS = ahorroBateria
+        ? Location.Accuracy.Balanced
+        : Location.Accuracy.High;
+      await Location.watchPositionAsync(
+        { accuracy: precisionGPS, distanceInterval: 2 },
+        (newL) => setLocation(newL.coords),
+      );
+    })();
+
+    return () => clearInterval(intervaloReloj);
+  }, [ahorroBateria]);
+
+  const manejarEscaneoQR = () => {
+    setMostrarCamara(false);
+    const pts = negocioSeleccionado ? negocioSeleccionado.recompensa : 10;
+    setPuntos((p) => p + pts);
+    setExperiencia((e) => Math.min(e + 15, 100));
+    Alert.alert("¡Éxito!", `+${pts} ${t.pts}`, [
+      {
+        text: "Ok",
+        onPress: () => {
+          setNegocioSeleccionado(null);
+          setRutaActiva(false);
+        },
+      },
+    ]);
+  };
+
+  const comprarArticulo = (item) => {
+    if (puntos >= item.precio) {
+      Alert.alert(
+        "Confirmar Compra",
+        `¿Quieres comprar ${item.nombre} por ${item.precio} pts?`,
+        [
+          { text: t.cancelar, style: "cancel" },
+          {
+            text: t.comprar,
+            onPress: () => {
+              setPuntos((p) => p - item.precio);
+              Alert.alert("¡Compra Exitosa!", "Revisa tu inventario.");
+            },
+          },
+        ],
+      );
+    } else {
+      Alert.alert(
+        "Puntos Insuficientes",
+        "Sigue explorando la ciudad para conseguir más puntos.",
+      );
+    }
+  };
+
+  const abrirEscaner = () => {
+    if (!permisoCamara?.granted) pedirPermisoCamara();
+    else setMostrarCamara(true);
+  };
+
+  let distanciaActual = 0;
+  let estaCerca = false;
+  if (location && negocioSeleccionado) {
+    distanciaActual = obtenerDistanciaMetros(
+      location.latitude,
+      location.longitude,
+      negocioSeleccionado.lat,
+      negocioSeleccionado.lng,
+    );
+    estaCerca = modoDevHack ? true : distanciaActual <= 30;
+  }
+
+  // --- PANTALLA COLECCIÓN CON VENTANAS FLOTANTES ---
+  const PantallaColeccion = () => (
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <MaterialIcons
+        name="catching-pokemon"
+        size={50}
+        color="#0dccf2"
+        style={{ marginBottom: 10 }}
+      />
+      <Text style={styles.tituloPantalla}>{t.titCol}</Text>
+
+      <View style={styles.gridColeccion}>
+        {TROFEOS.map((trofeo) => (
+          <TouchableOpacity
+            key={trofeo.id}
+            style={[
+              styles.trofeoCard,
+              !trofeo.desbloqueado && styles.trofeoBloqueado,
+            ]}
+            onPress={() => setTrofeoSeleccionado(trofeo)}
+          >
+            <View
+              style={[
+                styles.trofeoIconoBg,
+                { borderColor: trofeo.desbloqueado ? trofeo.color : "#334155" },
+              ]}
+            >
+              <MaterialIcons
+                name={trofeo.desbloqueado ? trofeo.icono : "lock"}
+                size={36}
+                color={trofeo.desbloqueado ? trofeo.color : "#475569"}
+              />
+            </View>
+            <Text
+              style={[
+                styles.trofeoTexto,
+                !trofeo.desbloqueado && { color: "#475569" },
+              ]}
+              numberOfLines={2}
+            >
+              {trofeo.nombre}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+  );
+
+  // --- PANTALLA TIENDA (NUEVA) ---
+  const PantallaTienda = () => (
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <MaterialIcons
+        name="store"
+        size={50}
+        color="#facc15"
+        style={{ marginBottom: 10 }}
+      />
+      <Text style={styles.tituloPantalla}>{t.titTienda}</Text>
+
+      {/* Saldo Actual */}
+      <View
+        style={[
+          styles.statsCard,
+          { marginTop: 0, marginBottom: 20, justifyContent: "center" },
+        ]}
+      >
+        <MaterialIcons
+          name="monetization-on"
+          size={30}
+          color="#facc15"
+          style={{ marginRight: 10 }}
+        />
+        <Text style={[styles.statValor, { fontSize: 30, marginTop: 0 }]}>
+          {puntos} {t.pts}
+        </Text>
+      </View>
+
+      {ARTICULOS_TIENDA.map((item) => (
+        <View key={item.id} style={styles.tiendaItemCard}>
+          <View
+            style={[
+              styles.tiendaIcono,
+              { backgroundColor: "rgba(255,255,255,0.05)" },
+            ]}
+          >
+            <MaterialIcons name={item.icono} size={32} color={item.color} />
+          </View>
+          <View style={styles.tiendaInfo}>
+            <Text style={styles.tiendaItemNombre}>{item.nombre}</Text>
+            <Text style={styles.tiendaItemDesc}>{item.desc}</Text>
+            <Text style={styles.tiendaItemPrecio}>
+              {item.precio} {t.pts}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.botonComprar,
+              puntos < item.precio && { backgroundColor: "#334155" },
+            ]}
+            onPress={() => comprarArticulo(item)}
+            disabled={puntos < item.precio}
+          >
+            <Text style={styles.textoBotonComprar}>{t.comprar}</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+    </ScrollView>
+  );
+
+  const PantallaPerfil = () => (
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      {/* CABECERA: Avatar y Nivel */}
+      <View style={styles.avatarGrande}>
+        <Image
+          source={necoIcono}
+          style={{ width: 80, height: 80, resizeMode: "contain" }}
+        />
+      </View>
+      <Text style={styles.tituloPantalla}>Isack</Text>
+      <Text style={[styles.subtituloPantalla, { color: "#facc15" }]}>
+        {t.nivel} {nivel}
+      </Text>
+
+      {/* BARRA DE EXPERIENCIA */}
+      <View style={styles.xpContainer}>
+        <Text style={styles.xpTexto}>
+          {t.exp} ({experiencia}%)
+        </Text>
+        <View style={styles.xpBarraFondo}>
+          <View
+            style={[styles.xpBarraProgreso, { width: `${experiencia}%` }]}
+          />
+        </View>
+      </View>
+
+      {/* TARJETA DE LIGA COMPETITIVA (NUEVO) */}
+      <View style={styles.ligaCard}>
+        <View style={styles.ligaIcono}>
+          <MaterialIcons name="emoji-events" size={32} color="#101f22" />
+        </View>
+        <View style={styles.ligaInfo}>
+          <Text style={styles.ligaTitulo}>Liga BUAP</Text>
+          <Text style={styles.ligaRango}>Rango Global: #5</Text>
+        </View>
+        <MaterialIcons name="chevron-right" size={28} color="#0dccf2" />
+      </View>
+
+      {/* ESTADÍSTICAS DE EXPLORACIÓN (NUEVO) */}
+      <View style={styles.statsRow}>
+        <View style={styles.statMiniCard}>
+          <MaterialIcons name="directions-run" size={24} color="#0bda54" />
+          <Text style={styles.statNumero}>12.5</Text>
+          <Text style={styles.statLabel}>Km</Text>
+        </View>
+        <View style={styles.statMiniCard}>
+          <MaterialIcons name="qr-code-scanner" size={24} color="#0dccf2" />
+          <Text style={styles.statNumero}>48</Text>
+          <Text style={styles.statLabel}>QRs</Text>
+        </View>
+        <View style={styles.statMiniCard}>
+          <MaterialIcons name="storefront" size={24} color="#facc15" />
+          <Text style={styles.statNumero}>15</Text>
+          <Text style={styles.statLabel}>MiPyMEs</Text>
+        </View>
+      </View>
+
+      {/* MONEDAS Y ENERGÍA */}
+      <View style={styles.statsCard}>
+        <View style={styles.statItem}>
+          <MaterialIcons name="monetization-on" size={24} color="#facc15" />
+          <Text style={styles.statValor}>{puntos}</Text>
+        </View>
+        <View style={styles.statItem}>
+          <MaterialIcons name="bolt" size={24} color="#0dccf2" />
+          <Text style={styles.statValor}>{energia}</Text>
+        </View>
+      </View>
+
+      {/* HISTORIAL RECIENTE (NUEVO) */}
+      <Text style={styles.seccionTitulo}>ACTIVIDAD RECIENTE</Text>
+      <View style={styles.historialContainer}>
+        <View style={styles.historialItem}>
+          <MaterialIcons
+            name="check-circle"
+            size={16}
+            color="#0bda54"
+            style={{ marginRight: 10 }}
+          />
+          <Text style={styles.historialTexto}>
+            Visitaste Panadería Don Pepe
+          </Text>
+          <Text style={styles.historialPuntos}>+50</Text>
+        </View>
+        <View style={styles.historialItem}>
+          <MaterialIcons
+            name="check-circle"
+            size={16}
+            color="#0bda54"
+            style={{ marginRight: 10 }}
+          />
+          <Text style={styles.historialTexto}>Misión: Kiosko Central</Text>
+          <Text style={styles.historialPuntos}>+20</Text>
+        </View>
+        <View style={styles.historialItem}>
+          <MaterialIcons
+            name="stars"
+            size={16}
+            color="#facc15"
+            style={{ marginRight: 10 }}
+          />
+          <Text style={styles.historialTexto}>¡Subiste al nivel 25!</Text>
+          <Text style={styles.historialPuntos}></Text>
+        </View>
+      </View>
+
+      {/* INSIGNIAS (Las que ya tenías) */}
+      <Text style={styles.seccionTitulo}>{t.insignias}</Text>
+      <View style={styles.logrosGrid}>
+        <View style={styles.logroItem}>
+          <View style={styles.logroCirculo}>
+            <MaterialIcons
+              name="local-fire-department"
+              size={28}
+              color="#ff2d55"
+            />
+          </View>
+          <Text style={styles.logroTexto}>x3</Text>
+        </View>
+        <View style={styles.logroItem}>
+          <View style={styles.logroCirculo}>
+            <MaterialIcons name="storefront" size={28} color="#facc15" />
+          </View>
+          <Text style={styles.logroTexto}>Local</Text>
+        </View>
+        <View style={styles.logroItem}>
+          <View style={styles.logroCirculo}>
+            <MaterialIcons name="directions-walk" size={28} color="#0bda54" />
+          </View>
+          <Text style={styles.logroTexto}>Walker</Text>
+        </View>
+      </View>
+    </ScrollView>
+  );
+
+  const PantallaAjustes = () => (
+    <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <Text style={styles.tituloPantalla}>{t.titAjustes}</Text>
+      <View style={styles.ajusteBloque}>
+        <TouchableOpacity
+          style={styles.botonDesplegable}
+          onPress={() => setModalIdiomasVisible(true)}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <MaterialIcons name="language" size={24} color="#0dccf2" />
+            <Text style={styles.textoBotonCyberLuz}>{t.nombrePropio}</Text>
+          </View>
+          <MaterialIcons name="arrow-drop-down" size={28} color="#0dccf2" />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.seccionTitulo}>{t.tema}</Text>
+      <View style={styles.ajusteFila}>
+        <Text style={styles.ajusteTexto}>{t.modoOscuro}</Text>
+        <TouchableOpacity onPress={() => setForzarNoche(!forzarNoche)}>
+          <MaterialIcons
+            name={forzarNoche ? "toggle-on" : "toggle-off"}
+            size={45}
+            color={forzarNoche ? "#0dccf2" : "#475569"}
+          />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.ajusteFila}>
+        <Text style={styles.ajusteTexto}>{t.ahorro}</Text>
+        <TouchableOpacity onPress={() => setAhorroBateria(!ahorroBateria)}>
+          <MaterialIcons
+            name={ahorroBateria ? "toggle-on" : "toggle-off"}
+            size={45}
+            color={ahorroBateria ? "#facc15" : "#475569"}
+          />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.seccionTitulo}>{t.audio}</Text>
+      <View style={styles.ajusteFila}>
+        <Text style={styles.ajusteTexto}>{t.musica}</Text>
+        <TouchableOpacity onPress={() => setMusicaFondo(!musicaFondo)}>
+          <MaterialIcons
+            name={musicaFondo ? "toggle-on" : "toggle-off"}
+            size={45}
+            color={musicaFondo ? "#0bda54" : "#475569"}
+          />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.ajusteFila}>
+        <Text style={styles.ajusteTexto}>{t.sfx}</Text>
+        <TouchableOpacity onPress={() => setEfectosSonido(!efectosSonido)}>
+          <MaterialIcons
+            name={efectosSonido ? "toggle-on" : "toggle-off"}
+            size={45}
+            color={efectosSonido ? "#0bda54" : "#475569"}
+          />
+        </TouchableOpacity>
+      </View>
+      <Text style={[styles.seccionTitulo, { color: "#ff2d55", marginTop: 30 }]}>
+        {t.dev}
+      </Text>
+      <View
+        style={[styles.ajusteFila, { borderColor: "rgba(255, 45, 85, 0.3)" }]}
+      >
+        <Text style={[styles.ajusteTexto, { color: "#ff2d55" }]}>
+          {t.hackDistancia}
+        </Text>
+        <TouchableOpacity onPress={() => setModoDevHack(!modoDevHack)}>
+          <MaterialIcons
+            name={modoDevHack ? "toggle-on" : "toggle-off"}
+            size={45}
+            color={modoDevHack ? "#ff2d55" : "#475569"}
+          />
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+
+  const renderizarAvatarMision = () => {
+    if (ahorroBateria) {
+      return (
+        <View
+          style={[
+            styles.avatarWrapper3D,
+            { justifyContent: "center", alignItems: "center" },
+          ]}
+        >
+          <Image
+            source={necoIcono}
+            style={{ width: 50, height: 50, resizeMode: "contain" }}
+          />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.avatarWrapper3D}>
+        <NecoAvatar />
+      </View>
+    );
+  };
+
+  const usarTemaOscuro = forzarNoche || esDeNoche;
+
+  return (
+    <View style={styles.container}>
+      {/* MODAL IDIOMAS */}
+      <Modal visible={modalIdiomasVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <BlurView intensity={90} tint="dark" style={styles.modalContent}>
+            <Text style={styles.modalTitulo}>{t.selIdioma}</Text>
+            <FlatList
+              data={listaIdiomas}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.idiomaItem,
+                    idioma === item.id && styles.idiomaItemSeleccionado,
+                  ]}
+                  onPress={() => {
+                    setIdioma(item.id);
+                    setModalIdiomasVisible(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.idiomaTexto,
+                      idioma === item.id && {
+                        color: "#101f22",
+                        fontWeight: "bold",
+                      },
+                    ]}
+                  >
+                    {item.nombre}
+                  </Text>
+                  {idioma === item.id && (
+                    <MaterialIcons name="check" size={20} color="#101f22" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              style={styles.botonCancelarModal}
+              onPress={() => setModalIdiomasVisible(false)}
+            >
+              <Text style={{ color: "#ff2d55", fontWeight: "bold" }}>
+                {t.cancelar}
+              </Text>
+            </TouchableOpacity>
+          </BlurView>
+        </View>
+      </Modal>
+
+      {/* MODAL INFO DE TROFEO (VENTANA FLOTANTE) */}
+      <Modal
+        visible={trofeoSeleccionado !== null}
+        transparent
+        animationType="slide"
+      >
+        <View style={styles.modalOverlay}>
+          <BlurView
+            intensity={90}
+            tint="dark"
+            style={[styles.modalContent, { alignItems: "center", padding: 30 }]}
+          >
+            <View
+              style={[
+                styles.trofeoIconoBg,
+                {
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  borderColor: trofeoSeleccionado?.desbloqueado
+                    ? trofeoSeleccionado?.color
+                    : "#475569",
+                  marginBottom: 20,
+                },
+              ]}
+            >
+              <MaterialIcons
+                name={
+                  trofeoSeleccionado?.desbloqueado
+                    ? trofeoSeleccionado?.icono
+                    : "lock"
+                }
+                size={48}
+                color={
+                  trofeoSeleccionado?.desbloqueado
+                    ? trofeoSeleccionado?.color
+                    : "#475569"
+                }
+              />
+            </View>
+            <Text
+              style={[
+                styles.tituloPantalla,
+                {
+                  color: trofeoSeleccionado?.desbloqueado ? "#fff" : "#94a3b8",
+                },
+              ]}
+            >
+              {trofeoSeleccionado?.nombre}
+            </Text>
+            <Text
+              style={{
+                color: "#94a3b8",
+                textAlign: "center",
+                fontSize: 16,
+                marginTop: 15,
+                lineHeight: 24,
+              }}
+            >
+              {trofeoSeleccionado?.desc}
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.botonCyber,
+                { marginTop: 30, backgroundColor: "#0dccf2" },
+              ]}
+              onPress={() => setTrofeoSeleccionado(null)}
+            >
+              <Text style={styles.textoBotonCyber}>Cerrar</Text>
+            </TouchableOpacity>
+          </BlurView>
+        </View>
+      </Modal>
+
+      {mostrarCamara ? (
+        <View style={styles.camaraContainer}>
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            facing="back"
+            onBarcodeScanned={manejarEscaneoQR}
+          />
+          <View style={styles.camaraOverlay}>
+            <Text style={styles.camaraTexto}>{t.escanea}</Text>
+            <TouchableOpacity
+              style={styles.botonCancelarModal}
+              onPress={() => setMostrarCamara(false)}
+            >
+              <Text style={{ color: "#ff2d55", fontWeight: "bold" }}>
+                {t.cancelar}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <>
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              { opacity: tabActual === "mapa" ? 1 : 0 },
+            ]}
+            pointerEvents={tabActual === "mapa" ? "auto" : "none"}
+          >
+            {location ? (
+              <MapView
+                style={StyleSheet.absoluteFillObject}
+                customMapStyle={usarTemaOscuro ? darkMapStyle : lightMapStyle}
+                showsUserLocation={false}
+                initialRegion={{
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+              >
+                <Marker
+                  coordinate={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  }}
+                  title={t.tu}
+                  zIndex={999}
+                >
+                  <View style={styles.jugadorMarker}>
+                    <Image source={necoIcono} style={styles.jugadorImagen} />
+                    <View style={styles.jugadorEtiqueta}>
+                      <Text style={styles.jugadorEtiquetaTexto}>{t.tu}</Text>
+                    </View>
+                  </View>
+                </Marker>
+                {negocios.map((n) => (
+                  <Marker
+                    key={n.id}
+                    coordinate={{ latitude: n.lat, longitude: n.lng }}
+                    onPress={() => {
+                      setNegocioSeleccionado(n);
+                      setRutaActiva(false);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.pinNegocio,
+                        negocioSeleccionado?.id === n.id &&
+                          styles.pinNegocioActivo,
+                        !usarTemaOscuro && {
+                          backgroundColor: "rgba(13, 204, 242, 0.5)",
+                        },
+                      ]}
+                    >
+                      <MaterialIcons
+                        name="location-on"
+                        size={24}
+                        color={
+                          negocioSeleccionado?.id === n.id
+                            ? "#ff2d55"
+                            : usarTemaOscuro
+                              ? "#0dccf2"
+                              : "#0f766e"
+                        }
+                      />
+                    </View>
+                  </Marker>
+                ))}
+                {rutaActiva && negocioSeleccionado && (
+                  <Polyline
+                    coordinates={[
+                      {
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                      },
+                      {
+                        latitude: negocioSeleccionado.lat,
+                        longitude: negocioSeleccionado.lng,
+                      },
+                    ]}
+                    strokeColor={usarTemaOscuro ? "#0dccf2" : "#0f766e"}
+                    strokeWidth={4}
+                    lineDashPattern={[6, 6]}
+                  />
+                )}
+              </MapView>
+            ) : (
+              <View style={styles.pantallaContainer}>
+                <Text style={styles.tituloPantalla}>{t.cargando}</Text>
+              </View>
+            )}
+
+            <View style={styles.topHud}>
+              <BlurView
+                intensity={60}
+                tint={usarTemaOscuro ? "dark" : "light"}
+                style={styles.pillBox}
+              >
+                <View style={styles.iconCirclePrimary}>
+                  <MaterialIcons
+                    name="star-rate"
+                    size={18}
+                    color={usarTemaOscuro ? "#0dccf2" : "#0891b2"}
+                  />
+                </View>
+                <View>
+                  <Text
+                    style={[
+                      styles.labelMini,
+                      !usarTemaOscuro && { color: "#334155" },
+                    ]}
+                  >
+                    {t.nivel}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.textBold,
+                      !usarTemaOscuro && { color: "#0f172a" },
+                    ]}
+                  >
+                    {nivel}
+                  </Text>
+                </View>
+              </BlurView>
+              <View style={styles.rightStats}>
+                <BlurView
+                  intensity={60}
+                  tint={usarTemaOscuro ? "dark" : "light"}
+                  style={styles.pillBoxSmall}
+                >
+                  <View style={styles.iconMiniWrapper}>
+                    <MaterialIcons
+                      name="monetization-on"
+                      size={16}
+                      color={usarTemaOscuro ? "#facc15" : "#ca8a04"}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.textBold,
+                      !usarTemaOscuro && { color: "#0f172a" },
+                    ]}
+                  >
+                    {puntos}
+                  </Text>
+                </BlurView>
+              </View>
+            </View>
+
+            {negocioSeleccionado && (
+              <View style={styles.misionContainer}>
+                <BlurView
+                  intensity={80}
+                  tint={usarTemaOscuro ? "dark" : "light"}
+                  style={styles.misionCard}
+                >
+                  {renderizarAvatarMision()}
+                  <View style={styles.misionInfo}>
+                    <Text
+                      style={[
+                        styles.misionTitulo,
+                        !usarTemaOscuro && { color: "#0f172a" },
+                      ]}
+                    >
+                      {negocioSeleccionado.nombre}
+                    </Text>
+                    {modoDevHack && (
+                      <Text
+                        style={{
+                          color: "#ff2d55",
+                          fontSize: 10,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        HACK ACTIVO
+                      </Text>
+                    )}
+                    {estaCerca ? (
+                      <Text style={styles.textoExito}>{t.zona}</Text>
+                    ) : (
+                      <Text
+                        style={[
+                          styles.misionDesc,
+                          !usarTemaOscuro && { color: "#475569" },
+                        ]}
+                      >
+                        {t.metros.replace("{d}", distanciaActual)}
+                      </Text>
+                    )}
+
+                    {/* BOTONES ACTUALIZADOS: IR ALLÁ y CANCELAR */}
+                    {estaCerca ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.botonCyber,
+                          { backgroundColor: "#ff2d55" },
+                        ]}
+                        onPress={abrirEscaner}
+                      >
+                        <MaterialIcons
+                          name="qr-code-scanner"
+                          size={18}
+                          color="#fff"
+                        />
+                        <Text
+                          style={[styles.textoBotonCyber, { color: "#fff" }]}
+                        >
+                          {t.escanea}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{ flexDirection: "row", gap: 10 }}>
+                        <TouchableOpacity
+                          style={[
+                            styles.botonCyber,
+                            !usarTemaOscuro && { backgroundColor: "#0ea5e9" },
+                          ]}
+                          onPress={() => setRutaActiva(true)}
+                        >
+                          <MaterialIcons
+                            name="near-me"
+                            size={18}
+                            color="#101f22"
+                          />
+                          <Text style={styles.textoBotonCyber}>{t.irAlla}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.botonCyber,
+                            {
+                              backgroundColor: "transparent",
+                              borderWidth: 1,
+                              borderColor: "#ff2d55",
+                            },
+                          ]}
+                          onPress={() => {
+                            setNegocioSeleccionado(null);
+                            setRutaActiva(false);
+                          }}
+                        >
+                          <MaterialIcons
+                            name="close"
+                            size={18}
+                            color="#ff2d55"
+                          />
+                          <Text
+                            style={[
+                              styles.textoBotonCyber,
+                              { color: "#ff2d55" },
+                            ]}
+                          >
+                            {t.cancelar}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </BlurView>
+              </View>
+            )}
+          </View>
+
+          {tabActual === "coleccion" && <PantallaColeccion />}
+          {tabActual === "tienda" && <PantallaTienda />}
+          {tabActual === "perfil" && <PantallaPerfil />}
+          {tabActual === "ajustes" && <PantallaAjustes />}
+
+          {/* NAVBAR INFERIOR (AHORA CON 5 BOTONES) */}
+          <View style={styles.bottomNavContainer}>
+            <BlurView intensity={80} tint="dark" style={styles.bottomNav}>
+              {[
+                { id: "mapa", icon: "map", label: t.mapa },
+                {
+                  id: "coleccion",
+                  icon: "catching-pokemon",
+                  label: t.coleccion,
+                },
+                { id: "tienda", icon: "storefront", label: t.tienda },
+                { id: "perfil", icon: "person", label: t.perfil },
+                { id: "ajustes", icon: "settings", label: t.ajustes },
+              ].map((tab) => (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={styles.navItem}
+                  onPress={() => setTabActual(tab.id)}
+                >
+                  <View style={styles.navIconWrapper}>
+                    <MaterialIcons
+                      name={tab.icon}
+                      size={26}
+                      color={tabActual === tab.id ? "#0dccf2" : "#475569"}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.navText,
+                      { color: tabActual === tab.id ? "#0dccf2" : "#475569" },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </BlurView>
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#081012" },
+  pantallaContainer: {
+    flex: 1,
+    backgroundColor: "#081012",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  scrollContainer: {
+    flexGrow: 1,
+    backgroundColor: "#081012",
+    alignItems: "center",
+    padding: 30,
+    paddingBottom: 120,
+    paddingTop: 60,
+  },
+  tituloPantalla: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  subtituloPantalla: { color: "#94a3b8", fontSize: 16, textAlign: "center" },
+  avatarGrande: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#1e293b",
+    borderWidth: 4,
+    borderColor: "#0dccf2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+
+  gridColeccion: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 20,
+  },
+  trofeoCard: {
+    width: "48%",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 15,
+    borderRadius: 16,
+    alignItems: "center",
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  trofeoBloqueado: { opacity: 0.5, backgroundColor: "rgba(0,0,0,0.3)" },
+  trofeoIconoBg: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 2,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  trofeoTexto: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  // ESTILOS DE LA TIENDA
+  tiendaItemCard: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 16,
+    padding: 15,
+    width: "100%",
+    marginBottom: 15,
+    alignItems: "center",
+  },
+  tiendaIcono: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  tiendaInfo: { flex: 1 },
+  tiendaItemNombre: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  tiendaItemDesc: { color: "#94a3b8", fontSize: 11, marginVertical: 4 },
+  tiendaItemPrecio: { color: "#facc15", fontSize: 14, fontWeight: "bold" },
+  botonComprar: {
+    backgroundColor: "#0dccf2",
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginLeft: 10,
+  },
+  textoBotonComprar: { color: "#101f22", fontWeight: "bold", fontSize: 12 },
+
+  xpContainer: { width: "100%", marginTop: 15, marginBottom: 10 },
+  xpTexto: {
+    color: "#0dccf2",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 5,
+    textAlign: "right",
+  },
+  xpBarraFondo: {
+    height: 8,
+    backgroundColor: "rgba(13, 204, 242, 0.2)",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  xpBarraProgreso: {
+    height: "100%",
+    backgroundColor: "#0dccf2",
+    borderRadius: 4,
+  },
+  // NUEVOS ESTILOS PARA EL PERFIL
+  ligaCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(13, 204, 242, 0.1)",
+    borderWidth: 1,
+    borderColor: "#0dccf2",
+    borderRadius: 16,
+    padding: 15,
+    width: "100%",
+    marginTop: 20,
+  },
+  ligaIcono: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#0dccf2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+    shadowColor: "#0dccf2",
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  ligaInfo: { flex: 1 },
+  ligaTitulo: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  ligaRango: {
+    color: "#0dccf2",
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
+    marginTop: 20,
+  },
+  statMiniCard: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 16,
+    padding: 15,
+    alignItems: "center",
+    marginHorizontal: 5,
+  },
+  statNumero: { color: "#fff", fontSize: 20, fontWeight: "bold", marginTop: 5 },
+  statLabel: {
+    color: "#94a3b8",
+    fontSize: 10,
+    textTransform: "uppercase",
+    fontWeight: "bold",
+    marginTop: 2,
+  },
+
+  historialContainer: {
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.02)",
+    borderRadius: 16,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
+  },
+  historialItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+  },
+  historialTexto: { flex: 1, color: "#e2e8f0", fontSize: 13 },
+  historialPuntos: { color: "#0bda54", fontWeight: "bold", fontSize: 14 },
+  statsCard: {
+    flexDirection: "row",
+    backgroundColor: "rgba(13, 204, 242, 0.05)",
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(13, 204, 242, 0.2)",
+    marginTop: 20,
+    gap: 50,
+  },
+  statItem: { alignItems: "center" },
+  statValor: { color: "#fff", fontSize: 22, fontWeight: "bold", marginTop: 5 },
+  seccionTitulo: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "bold",
+    letterSpacing: 2,
+    marginTop: 40,
+    marginBottom: 15,
+    alignSelf: "flex-start",
+  },
+
+  ajusteBloque: {
+    width: "100%",
+    alignItems: "center",
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  ajusteFila: {
+    flexDirection: "row",
+    width: "100%",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    padding: 15,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.05)",
+    marginBottom: 10,
+  },
+  ajusteTexto: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  botonDesplegable: {
+    flexDirection: "row",
+    width: "100%",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "rgba(13, 204, 242, 0.1)",
+    padding: 15,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#0dccf2",
+  },
+  textoBotonCyberLuz: { color: "#0dccf2", fontWeight: "bold", fontSize: 16 },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    width: "100%",
+    maxHeight: "80%",
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(13, 204, 242, 0.5)",
+    overflow: "hidden",
+  },
+  modalTitulo: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  idiomaItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  idiomaItemSeleccionado: { backgroundColor: "#0dccf2", borderRadius: 12 },
+  idiomaTexto: { color: "#fff", fontSize: 16 },
+  botonCancelarModal: {
+    marginTop: 20,
+    padding: 15,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderColor: "rgba(255, 45, 85, 0.3)",
+  },
+
+  jugadorMarker: { alignItems: "center", justifyContent: "center" },
+  jugadorImagen: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    borderColor: "#fff",
+    backgroundColor: "#1e293b",
+  },
+  jugadorEtiqueta: {
+    backgroundColor: "#0dccf2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: -8,
+    borderWidth: 1,
+    borderColor: "#101f22",
+  },
+  jugadorEtiquetaTexto: { color: "#101f22", fontSize: 9, fontWeight: "900" },
+  pinNegocio: {
+    backgroundColor: "rgba(13, 204, 242, 0.2)",
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#0dccf2",
+  },
+  pinNegocioActivo: {
+    backgroundColor: "rgba(255, 45, 85, 0.2)",
+    borderColor: "#ff2d55",
+    transform: [{ scale: 1.2 }],
+  },
+  topHud: {
+    position: "absolute",
+    top: 50,
+    left: 15,
+    right: 15,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    zIndex: 10,
+  },
+  pillBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(13, 204, 242, 0.3)",
+  },
+  iconCirclePrimary: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(13, 204, 242, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
+  },
+  iconMiniWrapper: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  labelMini: {
+    color: "rgba(13, 204, 242, 0.8)",
+    fontSize: 9,
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  textBold: { color: "#fff", fontSize: 14, fontWeight: "bold" },
+  rightStats: { flexDirection: "row", gap: 8 },
+  pillBoxSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: "rgba(13, 204, 242, 0.3)",
+    gap: 4,
+  },
+  misionContainer: {
+    position: "absolute",
+    bottom: 110,
+    left: 15,
+    right: 15,
+    zIndex: 10,
+  },
+  misionCard: {
+    flexDirection: "row",
+    padding: 15,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(13, 204, 242, 0.4)",
+    alignItems: "center",
+  },
+  avatarWrapper3D: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(13, 204, 242, 0.1)",
+    borderWidth: 2,
+    borderColor: "#0dccf2",
+    overflow: "hidden",
+  },
+  misionInfo: { flex: 1, marginLeft: 15 },
+  misionTitulo: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  misionDesc: { color: "#94a3b8", fontSize: 12, marginBottom: 10 },
+  textoExito: {
+    color: "#0bda54",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  botonCyber: {
+    backgroundColor: "#0dccf2",
+    flexDirection: "row",
+    alignSelf: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+    alignItems: "center",
+  },
+  textoBotonCyber: {
+    color: "#101f22",
+    fontWeight: "900",
+    fontSize: 14,
+    textTransform: "uppercase",
+  },
+  bottomNavContainer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  bottomNav: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingBottom: 30,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderColor: "rgba(13, 204, 242, 0.2)",
+  },
+  navItem: { alignItems: "center", gap: 4, flex: 1 },
+  navIconWrapper: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navText: { fontSize: 8, fontWeight: "bold", letterSpacing: 1 },
+  camaraContainer: { flex: 1, justifyContent: "flex-end" },
+  camaraOverlay: {
+    backgroundColor: "rgba(16, 31, 34, 0.8)",
+    padding: 40,
+    alignItems: "center",
+    borderTopWidth: 2,
+    borderColor: "#0dccf2",
+  },
+  camaraTexto: {
+    color: "#fff",
+    fontSize: 18,
+    marginBottom: 20,
+    fontWeight: "bold",
+  },
+});

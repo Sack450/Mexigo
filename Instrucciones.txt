@@ -1,0 +1,3 @@
+para encender el deste, en la terminal escribe
+npx expo start 
+y escaneas el qr con el expo go
